@@ -1,0 +1,265 @@
+CREATE TABLE LayOffs 
+( company_name VARCHAR(255), 
+  location VARCHAR(255), 
+  industry VARCHAR(100), 
+  total_laid_off INT, 
+  percentage_laid_off DECIMAL(5, 2), 
+  date DATE, 
+  stage VARCHAR(50), 
+  country VARCHAR(100), 
+  funds_raised DECIMAL(10, 2) 
+);
+
+select  * from LayOffs
+
+with cte as (    -- check dupicate value is present or not
+select *,row_number() over(partition by company_name,location,industry,total_laid_off,percentage_laid_off,date,stage,country,funds_raised) as rn
+from LayOffs)
+
+select company_name,location,industry,total_laid_off,percentage_laid_off,date,stage,country,funds_raised
+from cte
+where rn > 1
+
+CREATE TABLE LayOffs1 -- create a new tabel
+( company_name VARCHAR(255), 
+  location VARCHAR(255), 
+  industry VARCHAR(100), 
+  total_laid_off INT, 
+  percentage_laid_off DECIMAL(5, 2), 
+  date DATE, 
+  stage VARCHAR(50), 
+  country VARCHAR(100), 
+  funds_raised DECIMAL(10, 2),
+  rn INT 
+);
+
+Insert into LayOffs1  --insert into new tabel
+select *,row_number() over(partition by company_name,location,industry,total_laid_off,percentage_laid_off,date,stage,country,funds_raised) as rn
+from LayOffs;
+
+select * from LayOffs1
+where rn >1
+
+DELETE from LayOffs1 --remove duplicate 
+where rn >1
+
+select * from LayOffs1
+order by industry
+
+UPDATE LayOffs1   --remove leading and trailing spaces
+SET company_name = TRIM(company_name)
+
+UPDATE LayOffs1  --Update value
+SET industry = 'Crypto'
+where industry = 'Crypto Currency' or industry = 'CryptoCurrency'
+
+UPDATE LayOffs1  --Update value
+SET country = 'United States'
+where country LIKE 'United States%'
+
+select * from LayOffs1
+where company_name = 'Airbnb'
+
+
+Select * from LayOffs1
+where industry is  null 
+
+select a1.industry,a1.total_laid_off,a2.industry,a2.total_laid_off   --self join
+from LayOffs1 a1
+inner join LayOffs1 a2 on a1.company_name = a2.company_name
+--where  a1.company_name = 'Airbnb'
+where a1.industry is null and a2.industry is not null 
+
+
+UPDATE LayOffs1 a1   --Update the a2.industry in a1.industry
+SET industry = a2.industry
+FROM LayOffs1 a2
+WHERE a1.company_name = a2.company_name AND a1.location = a2.location
+  AND a1.industry IS NULL
+  AND a2.industry IS NOT NULL;
+
+select * from LayOffs1 --check it is update
+order by company_name 
+
+select * from LayOffs1 --Check column having both null 
+where total_laid_off is null and percentage_laid_off is null
+
+Delete from LayOffs1 --Delete that row 
+where total_laid_off is null and percentage_laid_off is null
+
+ALTER TABLE LayOffs1 --Drop rn column
+DROP COLUMN rn;
+
+UPDATE LayOffs1
+SET percentage_laid_off = percentage_laid_off * 100
+
+UPDATE LayOffs1
+SET percentage_laid_off = ROUND(percentage_laid_off,0)
+
+
+--------------------------------------------EDA----------------------------------------------------
+select * from LayOffs1
+--where company_name = 'Amazon'
+order by total_laid_off desc
+
+select max(total_laid_off),max(percentage_laid_off) --max total_laid_off at one time and max percentage_laid_off
+from LayOffs1
+
+select company_name,percentage_laid_off--check company name where percentage_laid_off = 100.00 
+from LayOffs1
+where percentage_laid_off = 100.00 --and funds_raised is not null
+order by funds_raised desc 
+
+select company_name,sum(total_laid_off) as laid_offs --overall laid_off by company 
+from LayOffs1
+group by company_name
+having sum(total_laid_off) is not null
+order by sum(total_laid_off) desc
+
+select industry,sum(total_laid_off) as laid_offs --overall laid_off by industry
+from LayOffs1
+group by industry
+having sum(total_laid_off) is not null
+order by sum(total_laid_off) desc
+
+
+select Country,sum(total_laid_off) as laid_offs --overall laid_off by Country
+from LayOffs1
+group by Country
+having sum(total_laid_off) is not null
+order by sum(total_laid_off) desc
+
+select EXTRACT(Year from date),sum(total_laid_off) as laid_offs--overall laid_off by Year
+from LayOffs1
+group by EXTRACT(Year from date)
+having EXTRACT(Year from date) is not null
+order by EXTRACT(Year from date) desc
+
+with cte2 as ( --checking percentage increase/decrease by privous year
+with cte as (
+select EXTRACT(Year from date) as Year,sum(total_laid_off) as laid_offs
+from LayOffs1
+group by EXTRACT(Year from date)
+having EXTRACT(Year from date) is not null
+order by EXTRACT(Year from date) desc)
+SELECT year,laid_offs,LEAD(laid_offs, 1,laid_offs) OVER (ORDER BY year DESC) AS prev_year_laid_offs,Round((laid_offs-LEAD(laid_offs, 1,laid_offs) OVER (ORDER BY year DESC))*100.0/LEAD(laid_offs, 1,laid_offs) OVER (ORDER BY year DESC),2) as Increase_Decrease_by_privous_year
+FROM cte)
+select year,laid_offs,prev_year_laid_offs,CONCAT(Increase_Decrease_by_privous_year,'%') as Increase_Decrease_by_privous_year
+from cte2
+
+with cte2 as (  --checking percentage increase/decrease by privous month
+with cte as (
+select TO_CHAR(date,'YYYY-MM') as months,sum(total_laid_off) as laid_offs
+FROM LayOffs1
+group by TO_CHAR(date,'YYYY-MM')
+having TO_CHAR(date,'YYYY-MM') is not null
+order by TO_CHAR(date,'YYYY-MM') desc)
+select months,laid_offs,lead(laid_offs,1,laid_offs) over(order by months desc) as privous_month,Round((laid_offs-lead(laid_offs,1,laid_offs) over(order by months desc))*100.0/lead(laid_offs,1,laid_offs) over(order by months desc),2) as Increase_decrease_by_privous_month
+from cte)
+select months,laid_offs,privous_month,CONCAT(Increase_decrease_by_privous_month,'%') as Increase_decrease_by_privous_month
+from cte2
+
+
+with cte as (  --check increase of laid off by months wise
+select TO_CHAR(date,'YYYY-MM') as months,sum(total_laid_off) as laid_offs
+from LayOffs1
+group by TO_CHAR(date,'YYYY-MM')
+having TO_CHAR(date,'YYYY-MM') is not null
+order by TO_CHAR(date,'YYYY-MM') desc)
+
+select months,laid_offs,sum(laid_offs) over(order by months) as increase_laid_off_month
+from cte
+
+with cte as ( --ranking of country by total laid off
+select company_name,EXTRACT(Year from date) as years,sum(total_laid_off) as laid_offs
+from LayOffs1
+group by company_name,EXTRACT(Year from date)
+having sum(total_laid_off) is not null)
+
+select *,row_number() over(partition by years order by laid_offs desc) as ranking
+from cte
+where years is not null
+
+with cte2 as (   --Top 5 country by total laid off
+with cte as ( 
+select company_name,EXTRACT(Year from date) as years,sum(total_laid_off) as laid_offs
+from LayOffs1
+group by company_name,EXTRACT(Year from date)
+having sum(total_laid_off) is not null)
+
+select *,row_number() over(partition by years order by laid_offs desc) as ranking
+from cte
+where years is not null)
+
+select * from cte2
+where ranking <=5
+
+
+SELECT --To count total number of employee
+    company_name,EXTRACT(Year from date),total_laid_off,
+    percentage_laid_off,
+    round((total_laid_off / percentage_laid_off),0) * 100 AS total_employees
+FROM LayOffs1
+WHERE percentage_laid_off > 0
+group by company_name,EXTRACT(Year from date),total_laid_off,percentage_laid_off
+order by EXTRACT(Year from date); -- Avoid division by zero
+
+ALTER TABLE LayOffs1 --create a column in existing tabel
+ADD total_employees INT
+
+UPDATE LayOffs1 --update the date in that column
+SET total_employees = ROUND((total_laid_off / percentage_laid_off) * 100, 0)
+WHERE percentage_laid_off > 0;
+
+select company_name,EXTRACT(year from date),total_laid_off,sum(total_employees) as total_employees --overall laid_off by company in respective of total_employees in year
+from LayOffs1
+group by company_name,total_laid_off,EXTRACT(year from date)
+having sum(total_employees) is not null
+order by sum(total_employees) desc
+
+with cte as ( -- max total employee
+select company_name,sum(total_employees) as total_employee
+from LayOffs1
+group by company_name
+having sum(total_employees) is not null
+order by sum(total_employees) desc)
+
+select max(total_employee)
+from cte
+
+with cte as (  --ranking of company based on total_employees
+select company_name,sum(total_employees) as total_employees 
+from LayOffs1
+group by company_name
+having sum(total_employees) is not null
+order by sum(total_employees) desc)
+
+select *,row_number() over(order by total_employees desc) as ranking
+from cte
+
+with cte2 as (
+with cte as (  --Top 5 company based on total_employees
+select company_name,sum(total_employees) as total_employees 
+from LayOffs1
+group by company_name
+having sum(total_employees) is not null
+order by sum(total_employees) desc)
+select *,row_number() over(order by total_employees desc) as ranking
+from cte)
+select company_name,total_employees
+from cte2 
+where ranking <=5
+
+with cte2 as ( --Top 5 country based on total_employee
+with cte as (
+select country,sum(total_employees) as total_employees 
+from LayOffs1
+group by country
+having sum(total_employees) is not null
+order by sum(total_employees) desc)
+select *,row_number() over(order by total_employees desc) as ranking
+from cte)
+select country
+from cte2 
+where ranking <=5
+
